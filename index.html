@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>海鸥的私人极简清单</title>
+    <style>
+        :root {
+            --bg-color: #faf9f5;
+            --text-color: #4a4a4a;
+            --light-text: #999999;
+            --border-color: #e0deda;
+            --accent-color: #8c7a6b;
+            --danger-color: #c9b1ab;
+            --safe-color: #a4b3a1; /* 收入/存钱罐主色 */
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); line-height: 1.6; padding-bottom: 80px; -webkit-font-smoothing: antialiased; }
+
+        header { padding: 24px 20px 16px; background: var(--bg-color); border-bottom: 1px solid var(--border-color); position: sticky; top: 0; z-index: 10; }
+        .header-flex { display: flex; justify-content: space-between; align-items: flex-start; }
+        h1 { font-size: 20px; font-weight: 500; letter-spacing: 2px; }
+        .summary { font-size: 13px; color: var(--light-text); margin-top: 4px; }
+        
+        .sync-btn { background: #fff; border: 1px solid var(--accent-color); color: var(--accent-color); padding: 4px 10px; font-size: 11px; cursor: pointer; }
+
+        .page { display: none; padding: 20px; }
+        .page.active { display: block; }
+
+        .input-group { background: #fff; padding: 16px; border: 1px solid var(--border-color); margin-bottom: 24px; }
+        input, textarea { width: 100%; border: none; border-bottom: 1px solid var(--border-color); padding: 8px 0; margin-bottom: 12px; font-size: 15px; background: transparent; outline: none; }
+        .btn-add { width: 100%; background: var(--text-color); color: #fff; border: none; padding: 12px; font-size: 14px; letter-spacing: 1px; cursor: pointer; }
+
+        ul { list-style: none; }
+        .item { background: #fff; padding: 16px; border: 1px solid var(--border-color); margin-bottom: 12px; position: relative; }
+        .item.pulled { opacity: 0.5; background: transparent; }
+        .item-header { display: flex; justify-content: space-between; align-items: center; }
+        .item-title { font-size: 16px; font-weight: 500; }
+        .item-price { font-family: monospace; color: var(--accent-color); }
+        .item-note { font-size: 13px; color: var(--light-text); margin: 8px 0; white-space: pre-wrap; }
+        .item-actions { display: flex; justify-content: flex-end; gap: 12px; border-top: 1px dashed var(--border-color); padding-top: 10px; margin-top: 5px; }
+        .action-btn { background: transparent; border: none; font-size: 12px; cursor: pointer; color: var(--light-text); }
+
+        /* 自定义日历 */
+        .calendar-container { background: #fff; border: 1px solid var(--border-color); padding: 15px 10px; margin-bottom: 20px; }
+        .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 14px; }
+        .cal-month-sum { text-align: center; font-size: 12px; color: var(--accent-color); margin-bottom: 15px; letter-spacing: 1px; border-bottom: 1px solid #f5f3ef; padding-bottom: 8px; }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border-color); border: 1px solid var(--border-color); }
+        .cal-head-cell { background: #fdfcfb; padding: 8px 0; text-align: center; font-size: 11px; color: var(--light-text); }
+        .cal-cell { background: #fff; min-height: 55px; padding: 4px; display: flex; flex-direction: column; align-items: center; cursor: pointer; position: relative; }
+        .cal-cell.today-marker::before { content: ''; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; background: var(--safe-color); border-radius: 50%; }
+        .cal-cell.active { background: var(--text-color); color: #fff; z-index: 5; }
+        .cal-cell.other-month { opacity: 0.2; pointer-events: none; }
+        .cal-date { font-size: 12px; }
+        .cal-money { font-size: 9px; margin-top: 4px; }
+        .cal-cell.active .cal-money { color: #fff !important; }
+
+        /* --- 自定义弹窗 UI --- */
+        #customModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
+        .modal-box { background: var(--bg-color); width: 85%; max-width: 320px; padding: 24px; border: 1px solid var(--border-color); animation: modalIn 0.2s ease; }
+        @keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal-msg { font-size: 14px; line-height: 1.6; color: var(--text-color); margin-bottom: 20px; text-align: center; letter-spacing: 0.5px; }
+        .modal-btns { display: flex; gap: 12px; }
+        .m-btn { flex: 1; padding: 12px; font-size: 13px; border: none; cursor: pointer; letter-spacing: 1px; }
+        .m-btn-cancel { background: #fff; color: var(--light-text); border: 1px solid var(--border-color); }
+        .m-btn-confirm { background: var(--text-color); color: #fff; }
+        
+        #modalInput { width: 100%; border: 1px solid var(--border-color); background: #fff; padding: 10px; font-size: 12px; color: var(--text-color); margin-bottom: 16px; display: none; outline: none; }
+
+        .report-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; background: #fff; }
+        .report-table td { padding: 12px 8px; border-bottom: 1px dashed var(--border-color); }
+
+        nav { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(250, 249, 245, 0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border-color); display: flex; }
+        .nav-item { flex: 1; text-align: center; padding: 16px 0; font-size: 13px; color: var(--light-text); cursor: pointer; }
+        .nav-item.active { color: var(--text-color); font-weight: 500; }
+        
+        .backup-area { margin-top: 50px; padding: 20px; border-top: 1px solid var(--border-color); text-align: center; }
+        .backup-btn { font-size: 10px; color: var(--light-text); margin: 0 10px; background: transparent; border: 1px solid var(--border-color); padding: 4px 8px; cursor: pointer; }
+        .empty-state { text-align: center; color: var(--light-text); padding: 40px 0; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-flex">
+            <div>
+                <h1 id="pageTitle">种草寄存处</h1>
+                <div class="summary" id="pageSummary">合计: ¥0</div>
+            </div>
+            <button class="sync-btn" onclick="syncToday()">同步今日北京时间</button>
+        </div>
+    </header>
+
+    <div id="customModal">
+        <div class="modal-box">
+            <div class="modal-msg" id="modalMsg">提示</div>
+            <input type="text" id="modalInput" placeholder="请输入...">
+            <div class="modal-btns">
+                <button class="m-btn m-btn-cancel" id="mCancelBtn" onclick="closeModal()">取消</button>
+                <button class="m-btn m-btn-confirm" id="mConfirmBtn">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="wishPage" class="page active">
+        <div class="input-group">
+            <input type="text" id="wName" placeholder="想买什么呢...">
+            <input type="number" id="wPrice" placeholder="大概多少钱 (¥)">
+            <textarea id="wNote" placeholder="写点备注吧..."></textarea>
+            <button class="btn-add" onclick="addItem('wish')">收纳进清单</button>
+        </div>
+        <ul id="wishList"></ul>
+        <div id="wishEmpty" class="empty-state">清单空空的，风吹过什么也没有</div>
+    </div>
+
+    <div id="ownPage" class="page">
+        <div class="input-group">
+            <input type="text" id="oName" placeholder="买到了什么好物...">
+            <input type="number" id="oPrice" placeholder="实际花费 (¥)">
+            <textarea id="oNote" placeholder="写下此刻的快乐..."></textarea>
+            <button class="btn-add" onclick="addItem('own')">记录入库</button>
+        </div>
+        <ul id="ownList"></ul>
+        <div id="ownEmpty" class="empty-state">目前还没有购入物品</div>
+    </div>
+
+    <div id="incomePage" class="page">
+        <div class="input-group">
+            <input type="text" id="iName" placeholder="哪里来的小钱钱...">
+            <input type="number" id="iPrice" placeholder="收入金额 (¥)">
+            <textarea id="iNote" placeholder="备注一下来源吧..."></textarea>
+            <button class="btn-add" style="background:var(--safe-color)" onclick="addItem('income')">存入小金库</button>
+        </div>
+        <ul id="incomeList"></ul>
+        <div id="incomeEmpty" class="empty-state">小金库空空的，加油鸭</div>
+    </div>
+
+    <div id="statPage" class="page">
+        <div class="calendar-container">
+            <div class="cal-header">
+                <span onclick="moveMonth(-1)" style="cursor:pointer; padding:0 15px;">◀</span>
+                <b id="calLabel">2026年4月</b>
+                <span onclick="moveMonth(1)" style="cursor:pointer; padding:0 15px;">▶</span>
+            </div>
+            <div class="cal-month-sum" id="monthTotalText">本月结余：¥0.00</div>
+            <div class="cal-grid" id="calGrid">
+                <div class="cal-head-cell">日</div><div class="cal-head-cell">一</div><div class="cal-head-cell">二</div>
+                <div class="cal-head-cell">三</div><div class="cal-head-cell">四</div><div class="cal-head-cell">五</div><div class="cal-head-cell">六</div>
+            </div>
+        </div>
+        
+        <div id="dayDetailArea">
+            <div id="detailTitle" style="font-size:12px; color:var(--light-text); margin-bottom:10px;">选择日期查看明细</div>
+            <table class="report-table">
+                <tbody id="detailBody"></tbody>
+            </table>
+        </div>
+        <div style="margin-top:40px; text-align:center;">
+            <button class="action-btn" style="color:var(--danger-color); font-size:11px;" onclick="askClear()">归档清理生活确幸簿</button>
+        </div>
+
+        <div class="backup-area">
+            <button class="backup-btn" onclick="exportJSON()">导出 JSON 备份</button>
+            <button class="backup-btn" onclick="importJSON()">导入 JSON 恢复</button>
+        </div>
+    </div>
+
+    <nav>
+        <div class="nav-item active" onclick="switchPage('wish')">种草</div>
+        <div class="nav-item" onclick="switchPage('own')">支出</div>
+        <div class="nav-item" onclick="switchPage('income')">小金库</div>
+        <div class="nav-item" onclick="switchPage('stat')">统计</div>
+    </nav>
+
+    <script>
+        function getBJDate() { return new Date(Date.now() + 8 * 3600000); }
+        function getBJDateStr() { return getBJDate().toISOString().split('T')[0]; }
+
+        let wishes = JSON.parse(localStorage.getItem('seguWishes')) || [];
+        let owns = JSON.parse(localStorage.getItem('seguOwns')) || [];
+        let incomes = JSON.parse(localStorage.getItem('seguIncomes')) || [];
+        let archives = JSON.parse(localStorage.getItem('seguArchives')) || [];
+        
+        let currentTab = 'wish';
+        let currentViewDate = getBJDate(); 
+        let selectedDateStr = getBJDateStr();
+
+        function showModal({msg, onConfirm, isAlert=false, inputType=null, inputValue=''}) {
+            const modal = document.getElementById('customModal');
+            const msgEl = document.getElementById('modalMsg');
+            const inputEl = document.getElementById('modalInput');
+            const confirmBtn = document.getElementById('mConfirmBtn');
+            const cancelBtn = document.getElementById('mCancelBtn');
+            msgEl.innerText = msg;
+            inputEl.style.display = inputType === 'input' ? 'block' : 'none';
+            cancelBtn.style.display = isAlert ? 'none' : 'block';
+            if(inputType === 'input') inputEl.value = inputValue;
+            confirmBtn.onclick = () => {
+                let result = inputType === 'input' ? inputEl.value : null;
+                if(onConfirm) onConfirm(result);
+                closeModal();
+            };
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('customModal').style.display = 'none'; }
+
+        // --- 新备份：JSON 导出导入 ---
+        function exportJSON() {
+            const data = { wishes, owns, incomes, archives, version: "2.0", date: new Date().toLocaleString() };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `海鸥的清单备份_${getBJDateStr()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importJSON() {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.json';
+            fileInput.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        wishes = data.wishes || [];
+                        owns = data.owns || [];
+                        incomes = data.incomes || [];
+                        archives = data.archives || [];
+                        save();
+                        showModal({msg: "数据已成功同步！(＾－＾)V", isAlert: true});
+                    } catch(err) { showModal({msg: "文件解析失败", isAlert: true}); }
+                };
+                reader.readAsText(file);
+            };
+            fileInput.click();
+        }
+
+        function syncToday() {
+            currentViewDate = getBJDate();
+            selectedDateStr = getBJDateStr();
+            render();
+            showModal({msg: `已同步至：${selectedDateStr}`, isAlert: true});
+        }
+
+        function save() {
+            localStorage.setItem('seguWishes', JSON.stringify(wishes));
+            localStorage.setItem('seguOwns', JSON.stringify(owns));
+            localStorage.setItem('seguIncomes', JSON.stringify(incomes));
+            localStorage.setItem('seguArchives', JSON.stringify(archives));
+            render();
+        }
+
+        function askDelete(id, listName) {
+            showModal({
+                msg: "确定要抹掉这条记录吗？",
+                onConfirm: () => {
+                    if(listName === 'wish') wishes = wishes.filter(i => i.id !== id);
+                    if(listName === 'own') owns = owns.filter(i => i.id !== id);
+                    if(listName === 'income') incomes = incomes.filter(i => i.id !== id);
+                    if(listName === 'archives') archives = archives.filter(i => i.id !== id);
+                    save();
+                }
+            });
+        }
+
+        function askClear() {
+            showModal({
+                msg: "确定要将当前支出归档吗？",
+                onConfirm: () => {
+                    archives = [...owns.map(i=>({...i, isArchived:true})), ...archives];
+                    owns = [];
+                    save();
+                }
+            });
+        }
+
+        function editNote(id, listType) {
+            let list = listType === 'wish' ? wishes : (listType === 'own' ? owns : incomes);
+            let item = list.find(i => i.id === id);
+            showModal({
+                msg: "编辑备注：",
+                inputType: 'input',
+                inputValue: item.note,
+                onConfirm: (val) => { if(val !== null) { item.note = val; save(); } }
+            });
+        }
+
+        function switchPage(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            // 兼容点击
+            if(event) event.currentTarget.classList.add('active');
+            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+            document.getElementById(tab + 'Page').classList.add('active');
+            const titles = {wish:'种草寄存处', own:'确幸簿', income:'小金库', stat:'统计中心'};
+            document.getElementById('pageTitle').innerText = titles[tab];
+            render();
+        }
+
+        function addItem(type) {
+            const prefix = type === 'wish' ? 'w' : (type === 'own' ? 'o' : 'i');
+            const name = document.getElementById(prefix + 'Name').value.trim();
+            const price = parseFloat(document.getElementById(prefix + 'Price').value) || 0;
+            const note = document.getElementById(prefix + 'Note').value.trim();
+            if (!name) return;
+            const item = { id: Date.now(), name, price, note, pulled: false, date: getBJDateStr() };
+            if (type === 'wish') wishes.unshift(item);
+            else if (type === 'own') owns.unshift(item);
+            else incomes.unshift(item);
+            document.getElementById(prefix + 'Name').value = '';
+            document.getElementById(prefix + 'Price').value = '';
+            document.getElementById(prefix + 'Note').value = '';
+            save();
+        }
+
+        function render() {
+            // 渲染种草
+            const wishListEl = document.getElementById('wishList');
+            wishListEl.innerHTML = '';
+            let wishTotal = 0;
+            wishes.sort((a,b) => a.pulled - b.pulled).forEach(item => {
+                if(!item.pulled) wishTotal += item.price;
+                wishListEl.innerHTML += `<li class="item ${item.pulled?'pulled':''}">
+                    <div class="item-header"><div>${item.name}</div><div class="item-price">¥${item.price.toFixed(2)}</div></div>
+                    ${item.note?`<div class="item-note">${item.note}</div>`:''}
+                    <div class="item-actions">
+                        <button class="action-btn" onclick="editNote(${item.id}, 'wish')">编辑</button>
+                        ${!item.pulled?`<button class="action-btn" style="color:var(--safe-color)" onclick="moveToOwn(${item.id})">转已购</button>`:''}
+                        <button class="action-btn" onclick="togglePull(${item.id})">${item.pulled?'恢复':'拔草'}</button>
+                        <button class="action-btn" onclick="askDelete(${item.id}, 'wish')">删除</button>
+                    </div></li>`;
+            });
+            document.getElementById('wishEmpty').style.display = wishes.length ? 'none' : 'block';
+
+            // 渲染支出
+            const ownListEl = document.getElementById('ownList');
+            ownListEl.innerHTML = '';
+            let ownTotal = 0;
+            owns.forEach(item => {
+                ownTotal += item.price;
+                ownListEl.innerHTML += `<li class="item">
+                    <div class="item-header"><div>${item.name}</div><div class="item-price">¥${item.price.toFixed(2)}</div></div>
+                    ${item.note?`<div class="item-note">${item.note}</div>`:''}
+                    <div class="item-actions">
+                        <button class="action-btn" onclick="editNote(${item.id}, 'own')">编辑</button>
+                        <button class="action-btn" onclick="askDelete(${item.id}, 'own')">删除</button>
+                    </div></li>`;
+            });
+            document.getElementById('ownEmpty').style.display = owns.length ? 'none' : 'block';
+
+            // 渲染收入
+            const incomeListEl = document.getElementById('incomeList');
+            incomeListEl.innerHTML = '';
+            let incomeTotal = 0;
+            incomes.forEach(item => {
+                incomeTotal += item.price;
+                incomeListEl.innerHTML += `<li class="item">
+                    <div class="item-header"><div>${item.name}</div><div class="item-price" style="color:var(--safe-color)">+¥${item.price.toFixed(2)}</div></div>
+                    ${item.note?`<div class="item-note">${item.note}</div>`:''}
+                    <div class="item-actions">
+                        <button class="action-btn" onclick="editNote(${item.id}, 'income')">编辑</button>
+                        <button class="action-btn" onclick="askDelete(${item.id}, 'income')">删除</button>
+                    </div></li>`;
+            });
+            document.getElementById('incomeEmpty').style.display = incomes.length ? 'none' : 'block';
+
+            const sums = {wish: `预算: ¥${wishTotal.toFixed(2)}`, own: `累计支出: ¥${ownTotal.toFixed(2)}`, income: `累计收入: ¥${incomeTotal.toFixed(2)}`, stat: `结余状态` };
+            document.getElementById('pageSummary').innerText = sums[currentTab];
+
+            if(currentTab === 'stat') renderCalendar();
+        }
+
+        function moveToOwn(id) {
+            let idx = wishes.findIndex(i => i.id === id);
+            let item = wishes.splice(idx, 1)[0];
+            item.pulled = false;
+            item.date = getBJDateStr();
+            owns.unshift(item);
+            save();
+        }
+
+        function togglePull(id) {
+            let item = wishes.find(i => i.id === id);
+            item.pulled = !item.pulled;
+            save();
+        }
+
+        function moveMonth(step) {
+            currentViewDate.setMonth(currentViewDate.getMonth() + step);
+            render();
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calGrid');
+            const label = document.getElementById('calLabel');
+            while(grid.children.length > 7) grid.removeChild(grid.lastChild);
+            const year = currentViewDate.getFullYear();
+            const month = currentViewDate.getMonth();
+            label.innerText = `${year}年${month + 1}月`;
+            const firstDay = new Date(year, month, 1).getDay();
+            const lastDate = new Date(year, month + 1, 0).getDate();
+            const todayStr = getBJDateStr();
+
+            let mIn = 0, mOut = 0;
+            const monthPrefix = `${year}-${String(month+1).padStart(2,'0')}`;
+            
+            [...owns, ...archives].forEach(x => { if(x.date && x.date.startsWith(monthPrefix)) mOut += x.price; });
+            incomes.forEach(x => { if(x.date && x.date.startsWith(monthPrefix)) mIn += x.price; });
+            
+            document.getElementById('monthTotalText').innerText = `${month+1}月结余：¥${(mIn - mOut).toFixed(2)}`;
+
+            for(let i=0; i<firstDay; i++) {
+                let empty = document.createElement('div');
+                empty.className = 'cal-cell other-month';
+                grid.appendChild(empty);
+            }
+            for(let d=1; d<=lastDate; d++) {
+                let dStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                let dOut = [...owns, ...archives].filter(x => x.date === dStr).reduce((s,x)=>s+x.price, 0);
+                let dIn = incomes.filter(x => x.date === dStr).reduce((s,x)=>s+x.price, 0);
+                let net = dIn - dOut;
+
+                let cell = document.createElement('div');
+                cell.className = `cal-cell ${selectedDateStr === dStr ? 'active' : ''} ${todayStr === dStr ? 'today-marker' : ''}`;
+                cell.innerHTML = `<span class="cal-date">${d}</span>`;
+                
+                if(dIn > 0 || dOut > 0) {
+                    const color = net >= 0 ? 'var(--safe-color)' : 'var(--accent-color)';
+                    const sign = net >= 0 ? '+' : '';
+                    cell.innerHTML += `<span class="cal-money" style="color:${color}">${sign}${net.toFixed(0)}</span>`;
+                }
+                
+                cell.onclick = () => { selectedDateStr = dStr; renderCalendar(); };
+                grid.appendChild(cell);
+            }
+            
+            const tbody = document.getElementById('detailBody');
+            const dOuts = [...owns, ...archives].filter(x => x.date === selectedDateStr).map(i => ({...i, type:'支'}));
+            const dIns = incomes.filter(x => x.date === selectedDateStr).map(i => ({...i, type:'收'}));
+            const detailItems = [...dIns, ...dOuts];
+
+            // 计算当日收支汇总
+            const dayTotalIn = dIns.reduce((sum, item) => sum + item.price, 0);
+            const dayTotalOut = dOuts.reduce((sum, item) => sum + item.price, 0);
+
+            // 更新下方明细栏标题，加入当日收支汇总显示
+            document.getElementById('detailTitle').innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+                    <span>${selectedDateStr} 流水明细</span>
+                    <span style="font-weight:normal; color:var(--light-text);">
+                        收 <span style="color:var(--safe-color)">¥${dayTotalIn.toFixed(2)}</span> / 
+                        支 <span style="color:var(--accent-color)">¥${dayTotalOut.toFixed(2)}</span>
+                    </span>
+                </div>`;
+
+            tbody.innerHTML = detailItems.length ? detailItems.map(i => `
+                <tr>
+                    <td style="color:${i.type==='收'?'var(--safe-color)':'var(--light-text)'}">[${i.type}] ${i.name}</td>
+                    <td style="text-align:right; color:${i.type==='收'?'var(--safe-color)':'var(--text-color)'}">${i.type==='收'?'+':'-'}¥${i.price.toFixed(2)}</td>
+                    <td style="text-align:right;width:40px;"><span style="color:var(--danger-color); cursor:pointer;" onclick="askDelete(${i.id}, '${i.type==='收'?'income':(owns.find(x=>x.id===i.id)?'own':'archives')}')">删</span></td>
+                </tr>
+            `).join('') : '<tr><td colspan="3" style="text-align:center;padding:20px;color:#ccc;">暂无记录</td></tr>';
+        }
+        render();
+    </script>
+</body>
+</html>
